@@ -1,26 +1,7 @@
--- Floodmaker - A mod to flood undersea caverns.
--- 2018-12-17
+-- Floodmaker - Easily create floods—caution required!
+-- 2018-12-22
 
 -- Copyright (C) 2018 David G (kestral246@gmail.com)
-
--- Features:
--- Gives interesting areas to explore with pitch fly mode extended to swimming #7943
--- Works best with airtanks mod, wielded_light mod (under_water_shine branch), and a mese lamp.
--- Only works at sealevel or below (I've destroyed several worlds already with massive floods.)
--- The under_water_shine branch isn't stable—it's crashed several times for me.
--- Only loaded mapchunks will get flooded.  Might have to do multiple times for really big undersea caverns.
--- Little error checking, it will scan through air and water until it hits maxcount.
-
--- To use:
--- Only works in creative mode.  No crafting recipe.
--- Max_water_level should be set to sea level or lower, by default y=1, to avoid catastrophic flooding.
--- Point at node and right click to get summary of what would be flooded.
---     A large number of existing water nodes suggests possible connection to the sea.
--- To actually flood, hold sneak key (default shift) while left clicking.
---     Not guaranteed to be the same as summary, since map blocks could load or unload, or other players could have changed the terrain.
--- The node clicked will turn to water, and then the flood will propagate through all
--- adjacent air and water nodes, but won't go any higher than the initial node.
-
 
 local scanned = {}			-- Set containing scanned nodes, so they don't get scanned multiple times.
 local tocheck = {}			-- Table of nodes to check.
@@ -102,11 +83,10 @@ local check_node = function(pname, pos, ymax)
 	scan_node(pname, vector.add(pos, {x=0,y=0,z=-1}))  -- south
 	scan_node(pname, vector.add(pos, {x=-1,y=0,z=0}))  -- west
 	scan_node(pname, vector.add(pos, {x=0,y=-1,z=0}))  -- down
-	local cover = false
 	if pos.y < ymax then
-		cover = scan_up(pname, vector.add(pos, {x=0,y=1,z=0}))  -- up
+		scan_node(pname, vector.add(pos, {x=0,y=1,z=0}))  -- up
 	end
-	if (cover or pos.y == ymax) and not string.match(name, "water_source") then
+	if not string.match(name, "water_source") then
 		table.insert(toflood[pname], enc_pos)
 	end
 	if string.match(name, "water") then watercount[pname] = watercount[pname] + 1 end -- for statistics
@@ -120,18 +100,17 @@ minetest.register_tool("floodmaker:floodmaker", {
 		local pname = player:get_player_name()
 		-- Only works in creative mode.
 		if creative and creative.is_enabled_for and creative.is_enabled_for(pname) then
-			local do_it = false
-			if player:get_player_control().sneak then
-				do_it = true
-			end
+			local key_stats = player:get_player_control()
+			local worldedit = minetest.check_player_privs(player, "worldedit")
 			-- Initialize temporary tables for safety.
 			scanned[pname] = {}
 			tocheck[pname] = {}
 			toflood[pname] = {}
 			watercount[pname] = 0
 			local pos = pointed_thing.under
+			local below_sea_level = pos.y <= max_water_level
 			-- Only works if pointing to node at or below water level.
-			if pos.y <= max_water_level then
+			if below_sea_level or worldedit then
 				-- Pointed to node will be changed to water.
 				table.insert(tocheck[pname], encode(pos))
 				local count = 1
@@ -140,7 +119,8 @@ minetest.register_tool("floodmaker:floodmaker", {
 					count = count + 1
 				end
 				count = count - 1
-				if do_it then
+				-- Test if doing actual flooding.
+				if (below_sea_level and key_stats.sneak) or (key_stats.sneak and key_stats.aux1) then
 					-- Print statistics.
 					minetest.chat_send_player(pname, "floodmaker: flooded "..tostring(count).." nodes, of which "..tostring(watercount[pname]).." were already water.")
 					minetest.debug("floodmaker: y = "..tostring(pos.y)..", scan = "..tostring(tlength(scanned[pname]))..", check = "..tostring(count)..", flood = "..tostring(tlength(toflood[pname]))..", already H20 = "..tostring(watercount[pname]))
@@ -151,8 +131,12 @@ minetest.register_tool("floodmaker:floodmaker", {
 					end
 				else
 					-- Print statistics.
-						minetest.chat_send_player(pname, "floodmaker: would flood "..tostring(count).." nodes, of which "..tostring(watercount[pname]).." are already water. (height = "..tostring(pos.y)..")")
+					minetest.chat_send_player(pname, "floodmaker: would flood "..tostring(count).." nodes, of which "..tostring(watercount[pname]).." are already water. (height = "..tostring(pos.y)..")")
+					if worldedit and not below_sea_level then
+						minetest.chat_send_player(pname, "Warning! You are ABOVE sea level! Be VERY cautious!")
+					else
 						minetest.chat_send_player(pname, "Press sneak (shift) while right-clicking to flood.")
+					end
 				end
 			else  -- too high
 				minetest.chat_send_player(pname, "floodmaker: height = "..tostring(pos.y)..", needs to be less than or equal to "..tostring(max_water_level))
