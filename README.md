@@ -9,9 +9,16 @@ Before:
 ------
 ![Floodmaker before screenshot](before.png "Before")
 
-After:
------
-![Floodmaker after screenshot](screenshot.png "After")
+After (intended):
+----------------
+![Floodmaker after intended screenshot](screenshot.png "Intended")
+
+After (unintended):
+------------------
+Full disclosure, after making the above screenshots, I discovered that I had flooded a good chunk of the forest below the cavern. It is really easy to flood more than is intended with this mod.  (If someone happens to come across this mod on github, let me know what you think about it. Right now I think it is too dangerous to publish on forum.minetest.net)
+
+![Floodmaker after unintended screenshot](unintended.png "Unintended")
+
 
 
 Features
