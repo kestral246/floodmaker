@@ -1,7 +1,8 @@
 -- Floodmaker - Easily create floods—caution required!
--- 2018-12-30
-
+-- 2019-03-22 
 -- Copyright (C) 2018 David G (kestral246@gmail.com)
+
+-- Cleanup code
 
 local scanned = {}			-- Set containing scanned nodes, so they don't get scanned multiple times.
 local tocheck = {}			-- Table of nodes to check.
@@ -87,6 +88,35 @@ local check_node = function(pname, pos, origin, maxdist2)
 	if string.match(name, "water") then watercount[pname] = watercount[pname] + 1 end -- for statistics
 end
 
+-- Define some utility functions
+-- wear threshholds are: 0, 49152, 32768, 16384, 1
+local check_wear = function(wear)
+	local wear_lu = {[0] = 20, [49152] = 40, [32768] = 60, [16384] = 80, [1] = 1000}
+	if wear_lu[wear] == nil then  -- set to twenty
+		return 20
+	else
+		return wear_lu[wear]
+	end
+end
+
+local incr_range = function(wear)
+	local incr_lu = {[0] = 49152, [49152] = 32768, [32768] = 16384, [16384] = 1, [1] = 1}
+	if incr_lu[wear] == nil then
+		return 0
+	else
+		return incr_lu[wear]
+	end
+end
+
+local decr_range = function(wear)
+	local decr_lu = {[1] = 16384, [16384] = 32768, [32768] = 49152, [49152] = 0}
+	if decr_lu[wear] == nil then
+		return 0
+	else
+		return decr_lu[wear]
+	end
+end
+
 minetest.register_tool("floodmaker:floodmaker", {
 	description = "Floodmaker",
 	inventory_image = "floodmaker.png",
@@ -97,21 +127,9 @@ minetest.register_tool("floodmaker:floodmaker", {
 			local key_stats = player:get_player_control()
 			local worldedit = minetest.check_player_privs(player, "worldedit")
 			if key_stats.sneak then
-				-- 0, 49152, 32768, 16384, 1
-				local wear = itemstack:get_wear()
-				if wear == 1 then
-					itemstack:set_wear(16384)
-					range[pname] = 80
-				elseif wear == 16384 then
-					itemstack:set_wear(32768)
-					range[pname] = 60
-				elseif wear == 32768 then
-					itemstack:set_wear(49152)
-					range[pname] = 40
-				else
-					itemstack:set_wear(0)
-					range[pname] = 20
-				end
+				local new_wear = decr_range(itemstack:get_wear())
+				range[pname] = check_wear(new_wear)
+				itemstack:set_wear(new_wear)
 				local sr = "unlimited"
 				if range[pname] <= 80 then sr = tostring(range[pname]) end
 				minetest.chat_send_player(pname, "floodmaker: range set to "..sr)
@@ -124,32 +142,25 @@ minetest.register_tool("floodmaker:floodmaker", {
 		-- Only works in creative mode.
 		if creative and creative.is_enabled_for and creative.is_enabled_for(pname) then
 			local key_stats = player:get_player_control()
-			local worldedit = minetest.check_player_privs(player, "worldedit")
-			-- Initialize temporary tables for safety.
+			local worldedit = false
+			if minetest.get_modpath("worldedit") ~= nil then  -- worldedit currently loaded
+				worldedit = minetest.check_player_privs(player, "worldedit")
+			end
 			if key_stats.sneak and not key_stats.aux1 then  -- change range only
-				local wear = itemstack:get_wear()
-				if wear == 0 then
-					itemstack:set_wear(49152)
-					range[pname] = 40
-				elseif wear == 49152 then
-					itemstack:set_wear(32768)
-					range[pname] = 60
-				elseif wear == 32768 then
-					itemstack:set_wear(16384)
-					range[pname] = 80
-				else
-					itemstack:set_wear(1)
-					range[pname] = 1000
-				end
+				local new_wear = incr_range(itemstack:get_wear())
+				range[pname] = check_wear(new_wear)
+				itemstack:set_wear(new_wear)
 				local sr = "unlimited"
 				if range[pname] <= 80 then sr = tostring(range[pname]) end
 				minetest.chat_send_player(pname, "floodmaker: range set to "..sr)
 				return itemstack
 			else
+				-- Initialize temporary tables for safety.
 				scanned[pname] = {}
 				tocheck[pname] = {}
 				toflood[pname] = {}
 				watercount[pname] = 0
+				range[pname] = check_wear(itemstack:get_wear())  -- wear is saved, so match range to wear.
 				local pos = vector.round(pointed_thing.under)
 				local below_sea_level = pos.y <= sea_level
 				-- Only works if pointing to node at or below water level.
@@ -188,6 +199,22 @@ minetest.register_tool("floodmaker:floodmaker", {
 				scanned[pname] = {}  -- Clear temporary tables, which could be large.
 				tocheck[pname] = {}
 				toflood[pname] = {}
+			end
+		end
+	end,
+	on_secondary_use = function(itemstack, player, pointed_thing)
+		local pname = player:get_player_name()
+		-- Only works in creative mode.
+		if creative and creative.is_enabled_for and creative.is_enabled_for(pname) then
+			local key_stats = player:get_player_control()
+			if key_stats.sneak and not key_stats.aux1 then  -- change range only
+				local new_wear = incr_range(itemstack:get_wear())
+				range[pname] = check_wear(new_wear)
+				itemstack:set_wear(new_wear)
+				local sr = "unlimited"
+				if range[pname] <= 80 then sr = tostring(range[pname]) end
+				minetest.chat_send_player(pname, "floodmaker: range set to "..sr)
+				return itemstack
 			end
 		end
 	end,
