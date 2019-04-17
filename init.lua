@@ -1,8 +1,8 @@
 -- Floodmaker - Easily create floods—caution required!
--- 2019-03-22 
+-- 2019-04-17 
 -- Copyright (C) 2018 David G (kestral246@gmail.com)
 
--- Cleanup code
+-- Use hash_node_position functions.
 
 local scanned = {}			-- Set containing scanned nodes, so they don't get scanned multiple times.
 local tocheck = {}			-- Table of nodes to check.
@@ -30,20 +30,6 @@ minetest.register_on_leaveplayer(function(player)
 	watercount[pname] = nil
 end)
 
--- Encode/decode xyz location into a single number to minimize memory usage of above tables.
-local encode = function(pos)
-	return (math.floor(pos.x + 32768) * 65536 + math.floor(pos.y + 32768)) * 65536 + math.floor(pos.z + 32768)
-end
-
-local decode = function(num)
-	local pos = {}
-	pos.z = (num % 65536) - 32768
-	local xy = math.floor(num / 65536)
-	pos.y = (xy % 65536) - 32768
-	pos.x = (math.floor(xy / 65536) % 65536) - 32768
-	return pos
-end
-
 -- Determine number of elements in table, for summary output.
 local tlength = function(T)
 	local count = 0
@@ -58,7 +44,7 @@ end
 -- Scan neighboring nodes, flag for checking if air or water.
 local scan_node = function(pname, pos, origin, maxdist2)
 	if square(pos.x - origin.x) + square(pos.z - origin.z) <= maxdist2 then
-		local enc_pos = encode(pos)
+		local enc_pos = minetest.hash_node_position(pos)
 		if scanned[pname][enc_pos] ~= true then  -- hasn't been scanned
 			local name = minetest.get_node(pos).name
 			if name == "air" or string.match(name, "water") then  -- checkable
@@ -72,7 +58,7 @@ end
 -- To check, scan all neighbors and determine if this node needs to be flooded.
 -- Since water propagates down, only need to flood surface nodes and covered nodes.
 local check_node = function(pname, pos, origin, maxdist2)
-	local enc_pos = encode(pos)
+	local enc_pos = minetest.hash_node_position(pos)
 	local name = minetest.get_node(pos).name
 	scan_node(pname, vector.add(pos, {x=0,y=0,z=1}), origin, maxdist2)  -- north
 	scan_node(pname, vector.add(pos, {x=1,y=0,z=0}), origin, maxdist2)  -- east
@@ -166,11 +152,11 @@ minetest.register_tool("floodmaker:floodmaker", {
 				-- Only works if pointing to node at or below water level.
 				if below_sea_level or worldedit then
 					-- Pointed to node will be changed to water.
-					table.insert(tocheck[pname], encode(pos))
+					table.insert(tocheck[pname], minetest.hash_node_position(pos))
 					local count = 1
 					local range2 = range[pname] * range[pname]  -- squared
 					while count <= table.getn(tocheck[pname]) and count <= maxcount do
-						check_node(pname, decode(tocheck[pname][count]), pos, range2)  -- fifo
+						check_node(pname, minetest.get_position_from_hash(tocheck[pname][count]), pos, range2)  -- fifo
 						count = count + 1
 					end
 					count = count - 1
@@ -181,7 +167,7 @@ minetest.register_tool("floodmaker:floodmaker", {
 						minetest.debug("floodmaker: y = "..tostring(pos.y)..", scan = "..tostring(tlength(scanned[pname]))..", check = "..tostring(count)..", flood = "..tostring(tlength(toflood[pname]))..", already H20 = "..tostring(watercount[pname]))
 						-- Add water sources to all nodes flagged for flooding.
 						for _,v in ipairs(toflood[pname]) do
-							local fpos = decode(v)
+							local fpos = minetest.get_position_from_hash(v)
 							minetest.set_node(fpos, {name="default:water_source"})
 						end
 					else
